@@ -1,0 +1,92 @@
+#include <Stepper.h>
+#include <LiquidCrystal_I2C.h>
+#include "DHT.h"
+
+enum PINS {
+  WATER_SENSOR = 7U,
+  RELAY_LED_PIN = 23U,
+  PULL_UP_SW = 8U
+};
+
+const uint16_t step_per_revolution = 1024U;
+
+Stepper stepping(step_per_revolution, 28, 24, 26, 22);
+DHT dht = DHT(A8, 11);
+LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
+
+String str_temperature = "Temperautre : ";
+
+uint8_t button_state {1};
+
+void setup() {
+  Serial.begin(115200UL);
+  pinMode(WATER_SENSOR, INPUT);
+  pinMode(RELAY_LED_PIN, OUTPUT);
+  pinMode(PULL_UP_SW, INPUT);
+
+  stepping.setSpeed(14U);
+
+  dht.begin();
+
+  lcd.init();
+  lcd.backlight();
+  lcd.print("LCD init");
+  delay(1000UL);
+  lcd.clear();
+  lcd.home();
+}
+
+void loop() {
+  if(dht.read()) {
+    float temperature {dht.readTemperature()};
+    Serial.print(str_temperature);
+    Serial.println(temperature);
+    lcd.setCursor(0,0);
+    lcd.print(str_temperature);
+    lcd.setCursor(0, 1);
+    lcd.print(temperature);
+    delay(500UL);
+    lcd.clear();
+  }
+
+  if(digitalRead(WATER_SENSOR)) {
+    lcd.setCursor(0, 0);
+    String str1 = "RAIN!!";
+    lcd.print(str1);
+    for( ; ; ) {
+      stepping.step(step_per_revolution);
+      delay(100UL);
+      stepping.step(-step_per_revolution);
+      delay(100UL);
+      if(digitalRead(WATER_SENSOR) == LOW) {
+        stepping.step(0);
+        lcd.clear();
+        break;
+      }
+    }
+  }
+
+  if(digitalRead(PULL_UP_SW) == LOW) {
+    delay(300UL);
+    button_state = !button_state;
+  }
+
+  if(button_state == 0) {
+    lcd.setCursor(0,0);
+    String str_warn = "WARNING";
+    lcd.print(str_warn);
+    for( ; ; ) {
+      digitalWrite(RELAY_LED_PIN, HIGH);
+      delay(300UL);
+      digitalWrite(RELAY_LED_PIN, LOW);
+      delay(300UL);
+      if(digitalRead(PULL_UP_SW) == LOW) {
+        delay(300UL);
+        button_state = 1;
+        digitalWrite(RELAY_LED_PIN, LOW);
+        lcd.clear();
+        break;
+      }
+    }
+  }
+}
